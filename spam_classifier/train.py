@@ -2,16 +2,16 @@
 # IMPORT LIBRARIES
 # ===============================
 import pandas as pd
+import os
 import re
 import string
 import nltk
 import pickle
 
 from nltk.corpus import stopwords
-from sklearn.model_selection import train_test_split, GridSearchCV
+from sklearn.model_selection import train_test_split
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics import accuracy_score, classification_report
-from sklearn.utils import resample
 
 from sklearn.naive_bayes import MultinomialNB
 from sklearn.linear_model import LogisticRegression
@@ -20,13 +20,11 @@ from sklearn.ensemble import RandomForestClassifier
 # ===============================
 # DOWNLOAD STOPWORDS
 # ===============================
-nltk.download('stopwords')
+nltk.download('stopwords', quiet=True)
 
 # ===============================
 # LOAD DATASET
 # ===============================
-import os
-
 dataset_files = [
     "dataset.csv",
     "../archive/emails.csv"
@@ -77,103 +75,69 @@ def clean_text(text):
     words = [word for word in words if word not in stop_words]
     return " ".join(words)
 
+print("\nCleaning text data...")
 df['message'] = df['message'].apply(clean_text)
 
 # ===============================
 # TRAIN TEST SPLIT
 # ===============================
-# Split BEFORE upsampling to prevent Data Leakage!
-X_train_raw, X_test_raw, y_train_raw, y_test = train_test_split(
+X_train_raw, X_test_raw, y_train, y_test = train_test_split(
     df['message'], df['label'], test_size=0.2, random_state=42, stratify=df['label']
 )
 
 # ===============================
-# HANDLE CLASS IMBALANCE (TRAINING DATA ONLY)
-# ===============================
-train_df = pd.DataFrame({'message': X_train_raw, 'label': y_train_raw})
-df_majority = train_df[train_df.label == 0]
-df_minority = train_df[train_df.label == 1]
-
-df_minority_upsampled = resample(
-    df_minority,
-    replace=True,
-    n_samples=len(df_majority),
-    random_state=42
-)
-
-train_df_up = pd.concat([df_majority, df_minority_upsampled])
-X_train_raw = train_df_up['message']
-y_train = train_df_up['label']
-
-print("\nBalanced Class Distribution (Train Set Only):\n")
-print(y_train.value_counts())
-
-# ===============================
 # FEATURE ENGINEERING & TF-IDF
 # ===============================
-# Fit vectorizer on training data ONLY
+print("\nVectorizing text data...")
 vectorizer = TfidfVectorizer(ngram_range=(1,2), max_features=5000)
 X_train = vectorizer.fit_transform(X_train_raw)
-X_test = vectorizer.transform(X_test_raw) # Only transform test data
+X_test = vectorizer.transform(X_test_raw)
 
 # ===============================
-# HYPERPARAMETER TUNING & MULTIPLE MODELS
+# MULTIPLE MODELS TRAINING
 # ===============================
-print("\nHyperparameter Tuning (Logistic Regression with 10-Fold CV)\n")
-
-# Using Logistic Regression which works best with TF-IDF and is robust
-param_grid = {
-    'C': [0.1, 1.0, 10.0]
+models = {
+    "Logistic Regression": LogisticRegression(max_iter=1000, class_weight='balanced'),
+    "Naive Bayes": MultinomialNB(),
+    "Random Forest": RandomForestClassifier(n_estimators=100, class_weight='balanced', random_state=42, n_jobs=-1)
 }
 
-grid = GridSearchCV(
-    LogisticRegression(max_iter=1000, class_weight='balanced'),
-    param_grid,
-    cv=10,
-    n_jobs=-1
-)
+trained_models = {}
 
-grid.fit(X_train, y_train)
-
-print("Best Parameters:", grid.best_params_)
-
-# ===============================
-# FINAL MODEL (USE BEST)
-# ===============================
-final_model = grid.best_estimator_
-
-y_pred = final_model.predict(X_test)
-
-print("\nFINAL MODEL PERFORMANCE\n")
-print("Accuracy:", accuracy_score(y_test, y_pred))
-print("\nClassification Report\n")
-print(classification_report(y_test, y_pred))
+print("\nTraining and Evaluating Models...\n")
+for name, model in models.items():
+    print(f"--- {name} ---")
+    model.fit(X_train, y_train)
+    y_pred = model.predict(X_test)
+    acc = accuracy_score(y_test, y_pred)
+    print(f"Accuracy: {acc:.4f}\n")
+    
+    trained_models[name] = model
 
 # ===============================
-# SAVE MODEL
+# SAVE MODELS
 # ===============================
-pickle.dump(final_model, open("spam_model.pkl", "wb"))
+pickle.dump(trained_models["Logistic Regression"], open("model_lr.pkl", "wb"))
+pickle.dump(trained_models["Naive Bayes"], open("model_nb.pkl", "wb"))
+pickle.dump(trained_models["Random Forest"], open("model_rf.pkl", "wb"))
 pickle.dump(vectorizer, open("vectorizer.pkl", "wb"))
 
-print("\nModel saved successfully!")
+print("Models and vectorizer saved successfully!\n")
 
 # ===============================
 # PREDICTION FUNCTION
 # ===============================
-def predict_spam(text):
-
+def predict_spam(text, model_name="Logistic Regression"):
     text_cleaned = clean_text(text)
     text_vec = vectorizer.transform([text_cleaned])
-    pred = final_model.predict(text_vec)
-
+    model = trained_models[model_name]
+    pred = model.predict(text_vec)
     return "Spam" if pred[0] == 1 else "Not Spam"
-
 
 # ===============================
 # TEST
 # ===============================
-print("\nTESTING\n")
-
+print("TESTING (Logistic Regression)")
 print(predict_spam("URGENT! You won $5000 prize"))
 print(predict_spam("Hey bro are we meeting tomorrow"))
 print(predict_spam("Invest $100 and earn $5000 in 24 hours"))
