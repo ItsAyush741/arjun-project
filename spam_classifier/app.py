@@ -7,15 +7,16 @@ import os
 st.set_page_config(page_title="Spam Classifier", page_icon="📧")
 
 @st.cache_resource
-def download_nltk_data():
+def get_stop_words():
+    import nltk
     try:
         nltk.data.find('corpora/stopwords')
     except LookupError:
         nltk.download('stopwords')
+    from nltk.corpus import stopwords
+    return set(stopwords.words('english'))
 
-download_nltk_data()
-from nltk.corpus import stopwords
-stop_words = set(stopwords.words('english'))
+stop_words = get_stop_words()
 
 st.title("📧 SMS & Email Spam Classifier")
 st.write("Enter the message below to check whether it's Spam or Not Spam (Ham).")
@@ -79,9 +80,14 @@ if st.button("Predict"):
             selected_model = models_dict[model_choice]
             prediction = selected_model.predict(text_vec)[0]
             
+            # Calculate and display spam probability
+            if hasattr(selected_model, "predict_proba"):
+                probabilities = selected_model.predict_proba(text_vec)[0]
+                spam_prob = probabilities[1] * 100
+                st.info(f"📊 Spam Probability: **{spam_prob:.2f}%**")
+            
             if prediction == 1:
                 st.error("🚨 This message is classified as **SPAM**!")
-                st.snow() # Optional fun effect
             else:
                 st.success("✅ This message is **NOT SPAM (Ham)**.")
-                st.balloons()
+                
