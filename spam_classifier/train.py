@@ -127,17 +127,39 @@ print("Models and vectorizer saved successfully!\n")
 # ===============================
 # PREDICTION FUNCTION
 # ===============================
-def predict_spam(text, model_name="Logistic Regression"):
+def predict_spam(text):
     text_cleaned = clean_text(text)
     text_vec = vectorizer.transform([text_cleaned])
-    model = trained_models[model_name]
-    pred = model.predict(text_vec)
-    return "Spam" if pred[0] == 1 else "Not Spam"
+    
+    print(f"\n--- Analyzing Text: '{text}' ---")
+    
+    best_model = None
+    highest_confidence = -1
+    
+    for name, model in trained_models.items():
+        if hasattr(model, "predict_proba"):
+            probs = model.predict_proba(text_vec)[0]
+            spam_prob = probs[1]
+            pred = model.predict(text_vec)[0]
+            label = "Spam" if pred == 1 else "Not Spam"
+            confidence = max(probs)
+            
+            print(f"{name+':':<20} {label:<10} (Spam Probability: {spam_prob:>7.2%})")
+            
+            if confidence > highest_confidence:
+                highest_confidence = confidence
+                best_model = name
+        else:
+            pred = model.predict(text_vec)[0]
+            label = "Spam" if pred == 1 else "Not Spam"
+            print(f"{name+':':<20} {label:<10}")
+            
+    if best_model:
+        print(f"💡 Preferred Model for this text: {best_model} (Highest Confidence: {highest_confidence:.2%})")
 
 # ===============================
 # TEST
 # ===============================
-print("TESTING (Logistic Regression)")
-print(predict_spam("URGENT! You won $5000 prize"))
-print(predict_spam("Hey bro are we meeting tomorrow"))
-print(predict_spam("Invest $100 and earn $5000 in 24 hours"))
+predict_spam("URGENT! You won $5000 prize")
+predict_spam("Hey bro are we meeting tomorrow")
+predict_spam("Invest $100 and earn $5000 in 24 hours")
