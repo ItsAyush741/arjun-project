@@ -23,10 +23,15 @@ st.write("Enter the message below to check whether it's Spam or Not Spam (Ham)."
 
 # Model Selection UI
 st.subheader("⚙️ Model Settings")
-model_choice = st.selectbox(
-    "Choose a Machine Learning Model:",
-    ["Logistic Regression", "Naive Bayes", "Random Forest"]
-)
+st.write("The system will analyze your text using all available models and suggest the best prediction based on the highest confidence level.")
+
+# Add a strictness threshold
+st.markdown("### 🎛️ Spam Strictness")
+spam_threshold = st.slider(
+    "Spam Probability Threshold (%)", 
+    min_value=10, max_value=99, value=50, step=1,
+    help="Increase this value if normal messages are being accidentally marked as Spam. Decrease if spam messages are slipping through."
+) / 100.0
 
 model_files = {
     "Logistic Regression": "model_lr.pkl",
@@ -73,21 +78,55 @@ if st.button("Predict"):
     if input_message.strip() == "":
         st.warning("Please enter a message to classify.")
     else:
-        with st.spinner(f"Analyzing message using {model_choice}..."):
+        with st.spinner("Analyzing message across all models..."):
             text_cleaned = clean_text(input_message)
             text_vec = vectorizer.transform([text_cleaned])
             
-            selected_model = models_dict[model_choice]
-            prediction = selected_model.predict(text_vec)[0]
+            st.markdown("### 📊 Model Comparison")
             
-            # Calculate and display spam probability
-            if hasattr(selected_model, "predict_proba"):
-                probabilities = selected_model.predict_proba(text_vec)[0]
-                spam_prob = probabilities[1] * 100
-                st.info(f"📊 Spam Probability: **{spam_prob:.2f}%**")
+            best_model = None
+            highest_confidence = -1
+            best_prediction = None
             
-            if prediction == 1:
-                st.error("🚨 This message is classified as **SPAM**!")
+            results_data = []
+
+            for name, model in models_dict.items():
+                if hasattr(model, "predict_proba"):
+                    probs = model.predict_proba(text_vec)[0]
+                    spam_prob = probs[1]
+                    
+                    # Apply custom threshold
+                    is_spam = spam_prob >= spam_threshold
+                    confidence = spam_prob if is_spam else (1.0 - spam_prob)
+                    
+                    results_data.append({
+                        "Model": name,
+                        "Prediction": "🚨 Spam" if is_spam else "✅ Not Spam",
+                        "Spam Probability": f"{spam_prob * 100:.2f}%",
+                        "Confidence": f"{confidence * 100:.2f}%"
+                    })
+                    
+                    if confidence > highest_confidence:
+                        highest_confidence = confidence
+                        best_model = name
+                        best_prediction = "SPAM" if is_spam else "NOT SPAM"
+                else:
+                    pred = model.predict(text_vec)[0]
+                    results_data.append({
+                        "Model": name,
+                        "Prediction": "🚨 Spam" if pred == 1 else "✅ Not Spam",
+                        "Spam Probability": "N/A",
+                        "Confidence": "N/A"
+                    })
+            
+            st.table(results_data)
+            
+            st.success(f"💡 **Preferred Model for this text: {best_model}** (Highest Confidence: {highest_confidence * 100:.2f}%)")
+            
+            # Show the final verdict based on the preferred model
+            st.markdown("### 🎯 Final Decision")
+            if best_prediction == "SPAM":
+                st.error(f"🚨 Based on the preferred model ({best_model}), this message is classified as **SPAM**!")
             else:
-                st.success("✅ This message is **NOT SPAM (Ham)**.")
+                st.success(f"✅ Based on the preferred model ({best_model}), this message is **NOT SPAM (Ham)**.")
                 
