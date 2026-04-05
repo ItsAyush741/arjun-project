@@ -33,10 +33,12 @@ spam_threshold = st.slider(
     help="Increase this value if normal messages are being accidentally marked as Spam. Decrease if spam messages are slipping through."
 ) / 100.0
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
 model_files = {
-    "Logistic Regression": "model_lr.pkl",
-    "Naive Bayes": "model_nb.pkl",
-    "Random Forest": "model_rf.pkl"
+    "Logistic Regression": os.path.join(BASE_DIR, "model_lr.pkl"),
+    "Naive Bayes": os.path.join(BASE_DIR, "model_nb.pkl"),
+    "Random Forest": os.path.join(BASE_DIR, "model_rf.pkl")
 }
 
 # Load model and vectorizer safely
@@ -50,8 +52,9 @@ def load_models():
         else:
             return None, None # Missing files handled outside
             
-    if os.path.exists("vectorizer.pkl"):
-        with open("vectorizer.pkl", "rb") as f:
+    vectorizer_path = os.path.join(BASE_DIR, "vectorizer.pkl")
+    if os.path.exists(vectorizer_path):
+        with open(vectorizer_path, "rb") as f:
             vectorizer = pickle.load(f)
     else:
         return None, None
